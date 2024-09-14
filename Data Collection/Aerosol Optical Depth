@@ -1,0 +1,64 @@
+var shar = ee.Geometry.Polygon( [[[55.4004, 25.2596], [55.4004, 25.4214], [55.6175, 25.4214], [55.6175, 25.2596]]] );
+
+// Load the MODIS MOD08_M3 V6.1 dataset for atmospheric parameters
+var dataset = ee.ImageCollection("MODIS/061/MOD08_M3")
+                .filterBounds(shar) // Filter by the ROI
+                .filterDate('2001-01-01', '2009-12-31'); // Filter by date from 2012 to 2023
+
+// Select the Aerosol Optical Depth (AOD) band using a valid band name
+var aodBand = 'Aerosol_Optical_Depth_Land_Ocean_Mean_Mean'; // Use a valid band name for AOD
+
+// Define the months of interest: January, February, March, April, and December
+var monthsOfInterest = ee.List([1, 2, 3, 4, 12]);
+
+// Define the years of interest from 2012 to 2023
+var years = ee.List.sequence(2001, 2009);
+
+// Function to calculate monthly mean AOD values
+var monthlyMeanAOD = years.map(function(year) {
+  return monthsOfInterest.map(function(month) {
+    // Filter the dataset for the specific year and month
+    var filtered = dataset.filter(ee.Filter.calendarRange(year, year, 'year'))
+                          .filter(ee.Filter.calendarRange(month, month, 'month'));
+    
+    // Calculate the mean AOD for the month
+    var monthlyMean = filtered.mean().select(aodBand); // Select AOD band
+    
+    // Reduce the mean AOD to a single value over the region
+    var meanAODValue = monthlyMean.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: shar,
+      scale: 10000,
+      maxPixels: 1e9
+    }).get(aodBand);
+    
+    // Return a feature with the month and the mean AOD value
+    return ee.Feature(null, {'month': month, 'mean_AOD': meanAODValue});
+  });
+}).flatten();
+
+// Convert the results to a FeatureCollection for visualization
+var aodFeatureCollection = ee.FeatureCollection(monthlyMeanAOD);
+
+// Print the FeatureCollection to the console to verify
+print('Monthly Average AOD values for specific months (2012-2023):', aodFeatureCollection);
+
+// Generate a table chart to display the results
+var chart = ui.Chart.feature.byFeature({
+  features: aodFeatureCollection, 
+  xProperty: 'month', // Use month number as the x-axis property
+  yProperties: ['mean_AOD'] // Use AOD values as the y-axis property
+})
+.setChartType('Table')
+.setOptions({
+  title: 'Monthly Average AOD for January, February, March, April, and December (2012-2023)',
+  columns: [
+    {label: 'Month', type: 'number'},
+    {label: 'Mean AOD', type: 'number'}
+  ],
+  allowHtml: true,
+  showRowNumber: true
+});
+
+// Display the chart
+print(chart);
