@@ -1,0 +1,51 @@
+% Load data
+pre_seeding_data = readtable('SHAR_SEEDED.csv');
+post_seeding_data = readtable('SHAR_UNSEEDED.csv');
+
+% Fit Poisson regression model for pre-cloud seeding data
+mdl_pre = fitglm(pre_seeding_data,'Rainfall ~ TEMP + TEMP:ET + Month', ...
+    'Distribution', 'poisson');
+
+% Fit Poisson regression model for post-cloud seeding data
+mdl_post = fitglm(post_seeding_data,'Rainfall ~ TEMP + TEMP:ET + Month', ...
+    'Distribution', 'poisson', 'Link', 'log');
+
+% Display summaries of both models
+disp('Pre-Cloud Seeding Model Summary:');
+disp(mdl_pre);
+disp(' ');
+
+disp('Post-Cloud Seeding Model Summary:');
+disp(mdl_post);
+disp(' ');
+
+% Extract coefficients and standard errors
+coeff_pre = mdl_pre.Coefficients.Estimate;
+se_pre = mdl_pre.Coefficients.SE;
+
+coeff_post = mdl_post.Coefficients.Estimate;
+se_post = mdl_post.Coefficients.SE;
+
+% Calculate Z-scores for difference between coefficients
+z_scores = (coeff_post - coeff_pre) ./ sqrt(se_pre.^2 + se_post.^2);
+
+% Calculate p-values for the Z-scores
+p_values = 2 * (1 - normcdf(abs(z_scores)));
+
+% Create a table for displaying results
+variable_names = mdl_pre.CoefficientNames';
+results_table = table(variable_names, coeff_pre, coeff_post, z_scores, p_values, ...
+    'VariableNames', {'Variable', 'Coeff_Pre', 'Coeff_Post', 'Z_Score', 'P_Value'});
+
+% Display results table
+disp('Comparison of Coefficients between Pre and Post Cloud Seeding Models:');
+disp(results_table);
+
+% Visualization of the coefficients
+figure;
+bar([coeff_pre, coeff_post]);
+set(gca, 'XTickLabel', variable_names);
+legend('Pre-Seeding', 'Post-Seeding');
+xlabel('Predictors');
+ylabel('Coefficient Estimates');
+title('Comparison of Coefficient Estimates: Pre-Seeding vs. Post-Seeding');
