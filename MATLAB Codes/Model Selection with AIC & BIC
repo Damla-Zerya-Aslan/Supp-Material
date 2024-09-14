@@ -1,0 +1,68 @@
+data = readtable('DUBAI_SEEDED.csv');
+
+Y = data.Rainfall;  
+x_T = data.TEMP;
+x_E = data.ET;
+x_V = data.VEG;
+x_A = data.AOD;
+x_S = data.SST
+Month = categorical(data.Month);
+
+tbl = table(Y, x_T, x_E, x_V, x_A, x_S, Month, 'VariableNames', {'Rainfall', 'TEMP', 'ET', 'VEG', 'AOD', 'SST', 'Month'});
+
+model1 = fitglm(tbl, 'Rainfall ~ ET + Month', 'Distribution', 'poisson');
+model2 = fitglm(tbl, 'Rainfall ~ TEMP + Month', 'Distribution', 'poisson');
+model3 = fitglm(tbl, 'Rainfall ~ TEMP * VEG + Month', 'Distribution', 'poisson');
+model4 = fitglm(tbl, 'Rainfall ~ TEMP * ET + Month', 'Distribution', 'poisson');
+model5 = fitglm(tbl, 'Rainfall ~ TEMP * AOD + Month', 'Distribution', 'poisson');
+model6 = fitglm(tbl, 'Rainfall ~ TEMP + TEMP:VEG + TEMP:AOD + Month', 'Distribution', 'poisson');
+model7 = fitglm(tbl, 'Rainfall ~ SST + SST:VEG + SST:AOD + Month', 'Distribution', 'poisson');
+
+
+aic1 = model1.ModelCriterion.AIC;
+bic1 = model1.ModelCriterion.BIC;
+
+aic2 = model2.ModelCriterion.AIC;
+bic2 = model2.ModelCriterion.BIC;
+
+aic3 = model3.ModelCriterion.AIC;
+bic3 = model3.ModelCriterion.BIC;
+
+aic4 = model4.ModelCriterion.AIC;
+bic4 = model4.ModelCriterion.BIC;
+
+aic5 = model5.ModelCriterion.AIC;
+bic5 = model5.ModelCriterion.BIC;
+
+aic6 = model6.ModelCriterion.AIC;
+bic6 = model6.ModelCriterion.BIC;
+
+aic7 = model7.ModelCriterion.AIC;
+bic7 = model7.ModelCriterion.BIC;
+
+disp('Model 1: ET');
+disp(['AIC: ', num2str(aic1), ' BIC: ', num2str(bic1)]);
+
+disp('Model 2: TEMP');
+disp(['AIC: ', num2str(aic2), ' BIC: ', num2str(bic2)]);
+
+disp('Model 3: VEGT');
+disp(['AIC: ', num2str(aic3), ' BIC: ', num2str(bic3)]);
+
+disp('Model 4: TET');
+disp(['AIC: ', num2str(aic4), ' BIC: ', num2str(bic4)]);
+
+disp('Model 5: TAOD');
+disp(['AIC: ', num2str(aic5), ' BIC: ', num2str(bic5)]);
+
+disp('Model 6: TVAOD');
+disp(['AIC: ', num2str(aic6), ' BIC: ', num2str(bic6)]);
+
+disp('Model 7: ');
+disp(['AIC: ', num2str(aic7), ' BIC: ', num2str(bic7)]);
+
+[~, bestAICIndex] = min([aic1, aic2, aic3, aic4, aic5, aic6, aic7]);
+[~, bestBICIndex] = min([bic1, bic2, bic3, bic4, bic5, bic6, bic7]);
+
+disp(['Best model by AIC: Model ', num2str(bestAICIndex)]);
+disp(['Best model by BIC: Model ', num2str(bestBICIndex)]);
