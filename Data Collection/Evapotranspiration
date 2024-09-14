@@ -1,0 +1,76 @@
+var shar = ee.Geometry.Polygon( [[[55.4004, 25.2596], [55.4004, 25.4214], [55.6175, 25.4214], [55.6175, 25.2596]]] );
+// Load the TerraClimate dataset for evapotranspiration rates
+var dataset = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE")
+                .filterBounds(shar) // Filter by the ROI
+                .filterDate('2001-01-01', '2009-12-31'); // Filter by date from 2001 to 2009
+
+// Define the months of interest: January, February, March, April, and December
+var monthsOfInterest = ee.List([1, 2, 3, 4, 12]);
+
+// Define the years of interest from 2001 to 2009
+var years = ee.List.sequence(2001, 2009);
+
+// Function to calculate monthly average evapotranspiration (ET)
+var calculateMonthlyET = function(year, month) {
+  // Filter images by year and month
+  var monthlyImages = dataset.filter(ee.Filter.calendarRange(year, year, 'year'))
+                             .filter(ee.Filter.calendarRange(month, month, 'month'));
+  
+  // Calculate the monthly average ET
+  var monthlyET = monthlyImages.mean().select('aet'); // 'aet' is the band for actual evapotranspiration
+  
+  // Reduce to get the average ET value
+  var etValue = monthlyET.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: shar,
+    scale: 1000,
+    maxPixels: 1e9
+  }).get('aet');
+  
+  // If etValue is null, handle as missing data
+  etValue = ee.Algorithms.If(ee.Algorithms.IsEqual(etValue, null), -1, etValue); // Handle null values
+
+  return ee.Feature(null, {
+    'year': year,
+    'month': month,
+    'monthly_avg_et': etValue
+  });
+};
+
+// Apply the calculation function to each year and month of interest
+var monthlyETResults = years.map(function(year) {
+  return monthsOfInterest.map(function(month) {
+    return calculateMonthlyET(year, month);
+  });
+}).flatten();
+
+// Convert to a FeatureCollection for easy manipulation
+var monthlyETCollection = ee.FeatureCollection(monthlyETResults);
+
+// Print the FeatureCollection to the console to verify
+print('Monthly Average ET values for specific months (2001-2009):', monthlyETCollection);
+
+// Extract the values for further inspection
+var etValues = monthlyETCollection.aggregate_array('monthly_avg_et').getInfo();
+print('Extracted ET values:', etValues);
+
+// Create a table chart to display the results
+var etTable = ui.Chart.feature.byFeature({
+  features: monthlyETCollection,
+  xProperty: null, // No explicit X property since we only want ET values
+  yProperties: ['monthly_avg_et']
+})
+.setChartType('Table')
+.setOptions({
+  title: 'Monthly Average Evapotranspiration for January, February, March, April, and December (2001-2009)',
+  columns: [
+    {label: 'Year', type: 'number'},
+    {label: 'Month', type: 'number'},
+    {label: 'Average ET (mm)', type: 'number'}
+  ],
+  allowHtml: true,
+  showRowNumber: true
+});
+
+// Display the table
+print(etTable);
