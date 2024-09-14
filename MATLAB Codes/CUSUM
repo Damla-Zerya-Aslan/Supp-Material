@@ -1,0 +1,88 @@
+% Function to calculate CUSUM and detect change point
+function [change_point_index, cusum] = detectChangePoint(rainfall, mean_rainfall)
+    cusum = cumsum(rainfall - mean_rainfall);
+    [~, change_point_index] = max(abs(cusum));
+end
+
+% Recursive function to detect multiple change points
+function change_points = recursiveCUSUM(rainfall, threshold, mean_rainfall)
+    [change_point_index, cusum] = detectChangePoint(rainfall, mean_rainfall);
+    if abs(cusum(change_point_index)) > threshold
+        change_points = change_point_index;
+        % Recursively detect in the two segments
+        if change_point_index > 1
+            left_change_points = recursiveCUSUM(rainfall(1:change_point_index-1), threshold, mean_rainfall);
+            change_points = [left_change_points, change_points];
+        end
+        if change_point_index < length(rainfall)
+            right_change_points = recursiveCUSUM(rainfall(change_point_index+1:end), threshold, mean_rainfall);
+            change_points = [change_points, change_point_index + right_change_points];
+        end
+    else
+        change_points = [];
+    end
+end
+
+% Load the data (Assumes data is stored in a CSV file named 'DUBAI_precp.csv')
+data = readtable('DUBAI_RES.csv');
+
+% Extract year, day, and precipitation depth
+years = data.Year;
+days = data.Day;
+rainfall = data.Rainfall;
+
+% Calculate the mean precipitation depth
+mean_rainfall = mean(rainfall);
+
+% Set the threshold for significant change points based on CUSUM value
+threshold = std(rainfall);  % Set as the standard deviation of the rainfall for now
+
+% Detect multiple change points using recursive CUSUM analysis
+change_points = recursiveCUSUM(rainfall, threshold, mean_rainfall);
+
+% Plot the CUSUM series and change points
+figure;
+cusum = cumsum(rainfall - mean_rainfall);
+plot(cusum, '-b', 'LineWidth', 1.5);
+hold on;
+plot(change_points, cusum(change_points), 'ro', 'MarkerSize', 10);  % Mark change points
+xlabel('Time (Days)');
+ylabel('CUSUM of Rainfall Deviation');
+title('CUSUM Plot with Detected Change Points');
+grid on;
+
+% Analyze each change point's significance using the Mann-Kendall test
+for i = 1:length(change_points)
+    cp = change_points(i);
+    
+    % Compute Mann-Kendall Test Statistic S and its standard deviation (σ_s) for segment before change point
+    n = length(rainfall(1:cp));
+    S = 0;
+    for ii = 1:n-1
+        for jj = ii+1:n
+            S = S + sign(rainfall(jj) - rainfall(ii));
+        end
+    end
+
+    % Compute the variance of S (σ_s^2)
+    var_S = (n*(n-1)*(2*n+5) - sum(arrayfun(@(x) x*(x-1)*(2*x+5), unique(rainfall(1:cp),'stable'))))/18;
+
+    % Calculate Mann-Kendall Zs
+    if S > 0
+        Zs = (S - 1) / sqrt(var_S);
+    elseif S < 0
+        Zs = (S + 1) / sqrt(var_S);
+    else
+        Zs = 0;
+    end
+    
+    % Hypothesis Testing for significance level
+    alpha = 0.1; % significance level
+    z_critical = norminv(1-alpha/2); % two-tailed test
+    
+    if abs(Zs) > z_critical
+        fprintf('Change point detected at day index: %d (Significant)\n', cp);
+    else
+        fprintf('Change point detected at day index: %d (Not significant)\n', cp);
+    end
+end
