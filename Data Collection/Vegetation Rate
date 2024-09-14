@@ -1,0 +1,73 @@
+var dubai = ee.Geometry.Polygon(
+  [[[55.1462, 25.3386], 
+    [55.1462, 24.7922], 
+    [55.5512, 24.7922], 
+    [55.5512, 25.3386]]]
+);
+
+// Load the MODIS MOD13A3 V6.1 dataset for vegetation indices
+var dataset = ee.ImageCollection("MODIS/061/MOD13A3")
+                .filterBounds(dubai) // Filter by the ROI
+                .filterDate('2001-01-01', '2009-12-31'); // Filter by date from 2012 to 2023
+
+// Define the months of interest: January, February, March, April, and December
+var monthsOfInterest = ee.List([1, 2, 3, 4, 12]);
+
+// Define the years of interest from 2012 to 2023
+var years = ee.List.sequence(2001, 2009);
+
+// Function to calculate monthly average NDVI
+var calculateMonthlyNDVI = function(year, month) {
+  // Filter images by year and month
+  var monthlyImages = dataset.filter(ee.Filter.calendarRange(year, year, 'year'))
+                             .filter(ee.Filter.calendarRange(month, month, 'month'));
+  
+  // Calculate the monthly average NDVI and apply scaling factor
+  var monthlyNDVI = monthlyImages.mean().select('NDVI').multiply(0.0001);
+  
+  // Return the monthly average NDVI as a feature with year, month, and NDVI properties
+  return ee.Feature(null, {
+    'year': year,
+    'month': month,
+    'monthly_avg_ndvi': monthlyNDVI.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: dubai,
+      scale: 1000,
+      maxPixels: 1e9
+    }).get('NDVI')
+  });
+};
+
+// Apply the calculation function to each year and month of interest
+var monthlyNDVIResults = years.map(function(year) {
+  return monthsOfInterest.map(function(month) {
+    return calculateMonthlyNDVI(year, month);
+  });
+}).flatten();
+
+// Convert to a FeatureCollection for easy manipulation
+var monthlyNDVICollection = ee.FeatureCollection(monthlyNDVIResults);
+
+// Print the FeatureCollection to the console to verify
+print('Monthly Average NDVI values for specific months (2012-2023):', monthlyNDVICollection);
+
+// Create a table chart to display the results
+var ndviTable = ui.Chart.feature.byFeature({
+  features: monthlyNDVICollection,
+  xProperty: null, // No explicit X property since we only want NDVI values
+  yProperties: ['monthly_avg_ndvi']
+})
+.setChartType('Table')
+.setOptions({
+  title: 'Monthly Average NDVI for January, February, March, April, and December (2012-2023)',
+  columns: [
+    {label: 'Year', type: 'number'},
+    {label: 'Month', type: 'number'},
+    {label: 'Average NDVI', type: 'number'}
+  ],
+  allowHtml: true,
+  showRowNumber: true
+});
+
+// Display the table
+print(ndviTable);
