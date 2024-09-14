@@ -1,0 +1,55 @@
+var dubai = ee.Geometry.Polygon([
+  [55.001, 24.616],  // Lower left corner
+  [55.001, 25.377],  // Upper left corner
+  [55.553, 25.377],  // Upper right corner
+  [55.553, 24.616]   // Lower right corner
+]);
+
+// Import the ERA5-Land Daily Aggregated dataset
+var era5LandDaily = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")
+  .filterDate('2023-01-01', '2023-12-31') // Set the date range for 2023
+  .filterBounds(dubai); // Set 'geometry' to the region of interest
+
+// Function to calculate daily precipitation and add date properties
+var calculateDailyPrecipitation = function(image) {
+  var precipitation = image.select('total_precipitation_sum'); // Use correct band name
+  var date = ee.Date(image.get('system:time_start')); // Get the date
+  var precipitationValue = precipitation.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: dubai,
+    scale: 1000,
+    maxPixels: 1e9
+  }).get('total_precipitation_sum');
+  
+  // Return a feature with date and precipitation properties
+  return ee.Feature(null, {
+    'day_of_year': date.getRelative('day', 'year'),
+    'precipitation': precipitationValue
+  });
+};
+
+// Apply the function to the image collection for each day
+var dailyPrecipitationCollection = era5LandDaily.map(calculateDailyPrecipitation);
+
+// Convert the results into a FeatureCollection
+var resultsCollection = ee.FeatureCollection(dailyPrecipitationCollection);
+
+// Print the results in table format with the day of the year on the left and precipitation on the right
+print('Daily Mean Precipitation for 2023 (Table Format):', resultsCollection);
+
+// Export results to Google Drive as a CSV file for further analysis
+Export.table.toDrive({
+  collection: resultsCollection,
+  description: 'DailyMeanPrecipitationDubai2023_Table',
+  fileFormat: 'CSV'
+});
+
+// Display the data in a table format using a UI Chart
+var table = ui.Chart.feature.byFeature(resultsCollection, 'day_of_year', ['precipitation'])
+  .setChartType('Table')
+  .setOptions({
+    title: 'Daily Mean Precipitation (mm) over Dubai in 2023',
+    pageSize: 365 // Show all days
+  });
+
+print(table);
