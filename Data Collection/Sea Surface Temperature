@@ -1,0 +1,68 @@
+var ras = ee.Geometry.Polygon(
+  [[[51.5, 24.0], [51.5, 26.5], [56.5, 26.5], [56.5, 24.0]]]
+);
+// Import the NOAA OISST dataset
+var oisst = ee.ImageCollection("NOAA/CDR/OISST/V2_1")
+  .filterDate('2001-01-01', '2009-12-31') // Set the date range from 2012 to 2023
+  .filterBounds(ras); // Set 'seaRegion' to the region of interest
+
+// Define the months of interest: January, February, March, April, and December
+var monthsOfInterest = ee.List([1, 2, 3, 4, 12]);
+
+// Define the years of interest from 2012 to 2023
+var years = ee.List.sequence(2001, 2009);
+
+// Function to calculate monthly average SST
+var calculateMonthlySST = function(year, month) {
+  // Filter images by year and month
+  var monthlyImages = oisst.filter(ee.Filter.calendarRange(year, year, 'year'))
+                           .filter(ee.Filter.calendarRange(month, month, 'month'));
+  
+  // Calculate the monthly average SST
+  var monthlySST = monthlyImages.mean().select('sst').multiply(0.01); // Scale to Celsius
+  
+  // Return the monthly average SST as a feature with year, month, and temperature properties
+  return ee.Feature(null, {
+    'year': year,
+    'month': month,
+    'monthly_avg_sst': monthlySST.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: ras,
+      scale: 10000 // Adjust the scale as needed for SST resolution
+    }).get('sst')
+  });
+};
+
+// Apply the calculation function to each year and month of interest
+var monthlySSTResults = years.map(function(year) {
+  return monthsOfInterest.map(function(month) {
+    return calculateMonthlySST(year, month);
+  });
+}).flatten();
+
+// Convert to a FeatureCollection for easy manipulation
+var monthlySSTCollection = ee.FeatureCollection(monthlySSTResults);
+
+// Print the FeatureCollection to the console to verify
+print('Monthly Average SST values for specific months (2012-2023):', monthlySSTCollection);
+
+// Create a table chart to display the results
+var sstTable = ui.Chart.feature.byFeature({
+  features: monthlySSTCollection,
+  xProperty: null, // No explicit X property since we only want SST values
+  yProperties: ['monthly_avg_sst']
+})
+.setChartType('Table')
+.setOptions({
+  title: 'Monthly Average Sea Surface Temperature for January, February, March, April, and December (2012-2023)',
+  columns: [
+    {label: 'Year', type: 'number'},
+    {label: 'Month', type: 'number'},
+    {label: 'Average SST (°C)', type: 'number'}
+  ],
+  allowHtml: true,
+  showRowNumber: true
+});
+
+// Display the table
+print(sstTable);
