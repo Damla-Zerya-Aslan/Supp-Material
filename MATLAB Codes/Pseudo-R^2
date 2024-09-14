@@ -1,0 +1,52 @@
+% Load data for each region
+dubai_data = readtable('DUBAI_SEEDED.csv');     
+alain_data = readtable('ALAIN_Seeded.csv');    
+rask_data = readtable('RASK_SEEDED.csv');    
+sharjah_data = readtable('SHAR_SEEDED.csv');   
+% Initialize a table to store the R^2 values for each region
+regions = {'Dubai', 'Al Ain', 'Ras al-Khaimah', 'Sharjah'};
+R2_results = array2table(zeros(4, 3), 'VariableNames', {'McFaddens_R2', 'Cox_Snells_R2', 'Nagelkerkes_R2'}, 'RowNames', regions);
+
+% Function to calculate Pseudo R^2 values
+function [McFaddens_R2, Cox_Snells_R2, Nagelkerkes_R2] = calculate_pseudo_R2(model, data, response_var)
+    % Calculate the log-likelihood for the fitted model
+    y = data.(response_var);  % Actual responses
+    mu = predict(model, data); % Predicted responses
+    
+    % Log-likelihood for the fitted model
+    logL_model = sum(y .* log(mu) - mu - log(factorial(y)));
+    
+    % Fit the null model (intercept-only model)
+    null_model = fitglm(data, [response_var ' ~ 1'], 'Distribution', 'poisson');
+    mu_null = mean(y);  % The mean of y is used as the fitted value for the null model
+    logL_null = sum(y .* log(mu_null) - mu_null - log(factorial(y)));
+    
+    % Number of observations
+    n = height(data);
+    
+    % Calculate McFadden's R^2
+    McFaddens_R2 = 1 - (logL_model / logL_null);
+    
+    % Calculate Cox & Snell's R^2
+    Cox_Snells_R2 = 1 - exp((2/n) * (logL_null - logL_model));
+    
+    % Calculate Nagelkerke's R^2
+    Nagelkerkes_R2 = Cox_Snells_R2 / (1 - exp((2/n) * logL_null));
+end
+
+% Define the models (replace these with the actual best-fit models)
+% Example: model1 = fitglm(dubai_data, 'Rainfall ~ TEMP + VEG', 'Distribution', 'poisson');
+% Replace the model definitions with the actual best-fit models
+model1 = fitglm(dubai_data, 'Rainfall ~ TEMP * VEG + Month', 'Distribution', 'poisson');
+model2 = fitglm(alain_data, 'Rainfall ~ TEMP * VEG + Month', 'Distribution', 'poisson');
+model3 = fitglm(rask_data, 'Rainfall ~ SST + SST:VEG + SST:AOD + Month', 'Distribution', 'poisson');
+model4 = fitglm(sharjah_data, 'Rainfall ~ TEMP + TEMP:VEG + TEMP:AOD + Month', 'Distribution', 'poisson');
+
+% Calculate pseudo R^2 values for each region
+[R2_results.McFaddens_R2(1), R2_results.Cox_Snells_R2(1), R2_results.Nagelkerkes_R2(1)] = calculate_pseudo_R2(model1, dubai_data, 'Rainfall');
+[R2_results.McFaddens_R2(2), R2_results.Cox_Snells_R2(2), R2_results.Nagelkerkes_R2(2)] = calculate_pseudo_R2(model2, alain_data, 'Rainfall');
+[R2_results.McFaddens_R2(3), R2_results.Cox_Snells_R2(3), R2_results.Nagelkerkes_R2(3)] = calculate_pseudo_R2(model3, rask_data, 'Rainfall');
+[R2_results.McFaddens_R2(4), R2_results.Cox_Snells_R2(4), R2_results.Nagelkerkes_R2(4)] = calculate_pseudo_R2(model4, sharjah_data, 'Rainfall');
+
+% Display the results
+disp(R2_results);
