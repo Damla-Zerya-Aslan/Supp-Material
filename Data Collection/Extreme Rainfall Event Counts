@@ -1,0 +1,88 @@
+var ain= ee.Geometry.Polygon(
+ [[[55.5000, 24.1000], 
+[55.5000, 24.3500], 
+[55.8000, 24.3500],
+ [55.8000, 24.1000]]] );
+
+
+
+// Import the ERA5-Land Daily Aggregated dataset
+var era5LandDaily = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")
+  .filterDate('2001-01-01', '2009-12-31') // Set the date range from 2012 to 2023
+  .filterBounds(ain); // Set 'geometry' to the region of interest
+
+// Function to calculate daily precipitation and add month, year, and time properties
+var calculateDailyPrecipitation = function(image) {
+  var precipitation = image.select('total_precipitation_sum'); // Use correct band name
+  var date = ee.Date(image.get('system:time_start'));
+  var month = date.get('month'); // Get the month from the date (1 for Jan, 2 for Feb, etc.)
+  var year = date.get('year'); // Get the year from the date
+  var precipitationValue = precipitation.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: ain,
+    scale: 1000
+  }).get('total_precipitation_sum');
+  
+  // Return the feature with year, month, precipitation properties, and timestamp
+  return ee.Feature(null, {
+    'year': year,
+    'month': month,
+    'precipitation': precipitationValue,
+    'system:time_start': date.millis()
+  });
+};
+
+// Apply the function to the image collection
+var dailyPrecipitationCollection = era5LandDaily.map(calculateDailyPrecipitation);
+
+// Filter the collection to include only days with precipitation above 0.0002 mm
+var precipitationAboveThreshold = dailyPrecipitationCollection.filter(ee.Filter.gt('precipitation', 0.0002));
+
+// Define the months of interest: January, February, March, April, and December
+var monthsOfInterest = ee.List([1, 2, 3, 4, 12]);
+
+// Define the years of interest from 2012 to 2023
+var years = ee.List.sequence(2006, 2009);
+
+// Function to count the number of days in each month with precipitation above the threshold
+var countDaysAboveThresholdByMonthYear = years.map(function(year) {
+  return monthsOfInterest.map(function(month) {
+    // Filter by year and month using timestamp information
+    var daysInMonth = precipitationAboveThreshold.filter(ee.Filter.calendarRange(year, year, 'year'))
+                                                 .filter(ee.Filter.calendarRange(month, month, 'month'))
+                                                 .size();
+    // Return a feature with the year, month, and count of days
+    return ee.Feature(null, {
+      'year': year,
+      'month': month,
+      'count': daysInMonth
+    });
+  });
+}).flatten();
+
+// Convert the results to a FeatureCollection for visualization
+var countFeatureCollection = ee.FeatureCollection(countDaysAboveThresholdByMonthYear);
+
+// Print the FeatureCollection to the console to verify
+print('Extreme rainfall event counts (precipitation > 0.0002 mm) for specific months (2012-2023):', countFeatureCollection);
+
+// Generate a table chart to display the results
+var chart = ui.Chart.feature.byFeature({
+  features: countFeatureCollection, 
+  xProperty: null, // No explicit X property since we only want counts
+  yProperties: ['count']
+})
+.setChartType('Table')
+.setOptions({
+  title: 'Extreme Rainfall Event Counts for January, February, March, April, and December (2012-2023)',
+  columns: [
+    {label: 'Year', type: 'number'},
+    {label: 'Month', type: 'number'},
+    {label: 'Count', type: 'number'}
+  ],
+  allowHtml: true,
+  showRowNumber: true
+});
+
+// Display the chart
+print(chart);
