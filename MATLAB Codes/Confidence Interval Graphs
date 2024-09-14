@@ -1,0 +1,69 @@
+%  This code has been used to create the graphs in Appendix 2
+% Load data
+data = readtable('RAS_UNSEEDED.csv');  % Adjust to your data file
+years = data.Year;  % Vector of years
+months = data.Month;  % Vector of months
+observed_counts = data.Rainfall;  % Observed extreme event counts
+
+% Fit Poisson regression model
+best_model = fitglm(data, 'Rainfall ~ ET + Month', 'Distribution', 'poisson');
+
+% Predict
+predicted_values = predict(best_model, data);
+
+% Identify and remove problematic data points
+problematicIdx = isnan(observed_counts) | isinf(observed_counts) | isnan(predicted_values) | isinf(predicted_values);
+cleaned_years = years(~problematicIdx);
+cleaned_observed_counts = observed_counts(~problematicIdx);
+cleaned_predicted_values = predicted_values(~problematicIdx);
+
+% Recalculate percentiles after removing problematic data points
+num_samples = 5000;  % Increase number of samples
+cleaned_pred_samples = poissrnd(repmat(cleaned_predicted_values, 1, num_samples));
+
+percentile_10 = prctile(cleaned_pred_samples, 10, 2);
+percentile_25 = prctile(cleaned_pred_samples, 25, 2);
+percentile_75 = prctile(cleaned_pred_samples, 75, 2);
+percentile_90 = prctile(cleaned_pred_samples, 90, 2);
+
+% Sort data by years to ensure lines are drawn correctly
+[sorted_years, sortIdx] = sort(cleaned_years);
+sorted_percentile_10 = percentile_10(sortIdx);
+sorted_percentile_25 = percentile_25(sortIdx);
+sorted_percentile_75 = percentile_75(sortIdx);
+sorted_percentile_90 = percentile_90(sortIdx);
+sorted_observed_counts = cleaned_observed_counts(sortIdx);
+
+% Use linear interpolation directly, if needed, without adding additional data points
+interp_years = sorted_years; % Use original years directly for line plotting
+interp_percentile_10 = sorted_percentile_10;
+interp_percentile_25 = sorted_percentile_25;
+interp_percentile_75 = sorted_percentile_75;
+interp_percentile_90 = sorted_percentile_90;
+
+% Plot
+figure;
+hold on;
+
+% Plot the 10th-90th percentile range as a filled area with purple color
+fill([interp_years; flipud(interp_years)], [interp_percentile_10; flipud(interp_percentile_90)], [0.6, 0.9, 0.5], 'EdgeColor', 'none', 'FaceAlpha', 0.4);
+
+% Plot the 25th-75th percentile range as a filled area with darker purple
+fill([interp_years; flipud(interp_years)], [interp_percentile_25; flipud(interp_percentile_75)], [0.4, 0.7, 0.5], 'EdgeColor', 'none', 'FaceAlpha', 0.6);
+
+% Plot the observed counts
+plot(sorted_years, sorted_observed_counts, 'ko', 'MarkerFaceColor', 'k', 'MarkerSize', 6);  % Black circles
+
+% Add labels, title, and legend
+xlabel('Year');
+ylabel('Number of Events');
+title('Observed and Modeled Extreme Event Counts (After Cleaning Data)');
+legend('10th-90th Percentiles', '25th-75th Percentiles', 'Observed Counts', 'Location', 'Best');
+
+% Adjust y-axis limits
+ylim([0, max([sorted_observed_counts; interp_percentile_90]) + 5]);
+
+hold off;
+
+% Save the refined plot
+saveas(gcf, 'Refined_Purple_Observed_vs_Modeled_Extreme_Events.png');
